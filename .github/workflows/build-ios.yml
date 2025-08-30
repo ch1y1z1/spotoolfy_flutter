@@ -3,6 +3,8 @@ name: Build iOS IPA
 on:
   push:
     branches: [main]
+    tags:
+      - "v*.*.*" # 匹配版本标签，如 v1.0.0
   pull_request:
     branches: [main]
   workflow_dispatch: # 允许手动触发
@@ -65,3 +67,23 @@ jobs:
           name: spotoolfy-ios-unsigned
           path: build/spotoolfy_unsigned.ipa
           retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/spotoolfy_unsigned.ipa
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## Spotoolfy Flutter iOS Build
+
+            📱 **未签名 iOS 应用包 (IPA)**
+
+            ### 版本信息
+            - **Flutter**: 3.35.2
+            - **构建时间**: ${{ github.event.head_commit.timestamp }}
+            - **提交**: ${{ github.sha }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
