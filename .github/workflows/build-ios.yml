@@ -1,0 +1,67 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.2"
+          channel: "stable"
+          cache: true
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Create secrets file
+        run: |
+          mkdir -p lib/config
+          cat > lib/config/secrets.dart << 'EOF'
+          class Secrets {
+            static const String spotifyClientId = 'dummy_client_id';
+            static const String spotifyClientSecret = 'dummy_client_secret';
+            static const String googleApiKey = 'dummy_api_key';
+          }
+          EOF
+
+      - name: Build iOS configuration (no codesign)
+        run: flutter build ios --release --no-codesign --config-only
+
+      - name: Build unsigned archive with xcodebuild
+        run: |
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_IDENTITY="" \
+            PROVISIONING_PROFILE="" \
+            archive -archivePath ../build/Runner.xcarchive
+
+      - name: Create unsigned IPA
+        run: |
+          cd build/Runner.xcarchive/Products/Applications
+          mkdir -p Payload
+          cp -R Runner.app Payload/Runner.app
+          zip -r ../../../spotoolfy_unsigned.ipa Payload
+
+      - name: Upload unsigned IPA as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotoolfy-ios-unsigned
+          path: build/spotoolfy_unsigned.ipa
+          retention-days: 30
